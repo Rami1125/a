@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>אזור אישי - ח.סבן</title>
+    <!-- PWA & Mobile Experience Tags -->
+    <meta name="theme-color" content="#ffffff"/>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+    <link rel="icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+
+    <!-- Fonts and Libraries -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        :root {
+            --brand: #0b72b9; --accent: #ff9f1c; --bg: #f0f2f5; --card: #ffffff;
+            --text-dark: #1a202c; --text-light: #4a5568; --text-muted: #718096;
+            --border: #e2e8f0; --success: #38a169; --warning: #dd6b20; --danger: #e53e3e;
+            --radius: 16px; --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --neon-blue: #00bfff;
+        }
+
+        /* --- Animations --- */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(229, 62, 62, 0); } }
+        @keyframes pulse-neon { 0%, 100% { box-shadow: 0 0 5px var(--neon-blue), 0 0 10px var(--neon-blue), 0 0 15px var(--neon-blue); } 50% { box-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue), 0 0 30px var(--neon-blue); } }
+        @keyframes checkmark { 0% { transform: scale(0); } 50% { transform: scale(1.2); } 100% { transform: scale(1); } }
+        @keyframes splash-zoom { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(1.2); opacity: 0; } }
+
+        /* --- Base & Layout --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; background-color: var(--bg); }
+        body { font-family: 'Assistant', sans-serif; color: var(--text-dark); display: flex; flex-direction: column; overscroll-behavior-y: contain; }
+
+        /* --- Splash Screen --- */
+        #splash-screen {
+            position: fixed; inset: 0; background-color: #fff; z-index: 10000;
+            display: flex; justify-content: center; align-items: center;
+            animation: fadeOut 0.5s 2.5s forwards;
+        }
+        #splash-logo {
+            width: 150px;
+            animation: splash-zoom 2s ease-out forwards;
+        }
+
+        /* --- App Structure --- */
+        #app-wrapper { visibility: hidden; opacity: 0; animation: fadeIn 0.5s 2.5s forwards; display: flex; flex-direction: column; height: 100%;}
+        .app-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background-color: var(--card); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+        .app-container { flex-grow: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 20px 15px 100px; }
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; height: 80px; background-color: var(--card); display: flex; justify-content: space-around; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 1000; }
+        
+        /* --- Header --- */
+        .profile-info { display: flex; align-items: center; gap: 10px; }
+        .profile-avatar { width: 40px; height: 40px; border-radius: 50%; position: relative; }
+        .profile-avatar img { width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--border); }
+        .online-indicator { position: absolute; bottom: 0; right: 0; width: 12px; height: 12px; background-color: var(--success); border-radius: 50%; border: 2px solid white; }
+        .clock-container { text-align: center; font-weight: 600; }
+        .date { font-size: 12px; color: var(--text-muted); }
+
+        /* --- General Components --- */
+        .card { background-color: var(--card); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; animation: slideUp 0.5s ease-out forwards; }
+        .page-title { font-size: 28px; font-weight: 700; margin-bottom: 20px; }
+        .btn { background: var(--brand); color: white; border: none; padding: 12px 18px; border-radius: 10px; cursor: pointer; font-weight: 700; font-size: 15px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; transition: background-color 0.2s; }
+        .btn.secondary { background-color: var(--bg); color: var(--text-dark); border: 1px solid var(--border); }
+        .btn:active { transform: scale(0.97); }
+
+        /* --- Dynamic Status Board --- */
+        #status-board {
+            display: none; /* Hidden by default */
+            padding: 15px;
+            border-radius: var(--radius);
+            margin-bottom: 20px;
+            background: #1a202c;
+            color: white;
+            animation: pulse-neon 2s infinite;
+        }
+        #status-board .status-text { font-size: 16px; font-weight: 600; text-align: center; }
+        .progress-bar { width: 100%; height: 6px; background-color: rgba(255,255,255,0.2); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+        .progress-bar-inner { height: 100%; background-color: var(--neon-blue); border-radius: 3px; transition: width 0.5s ease-out; }
+
+        /* --- Container Cube --- */
+        .container-cube {
+            background-color: var(--card);
+            border-radius: var(--radius);
+            margin-bottom: 15px;
+            box-shadow: var(--shadow);
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        .container-cube.overdue {
+            border-color: var(--danger);
+            animation: pulse-red 2s infinite;
+        }
+        .cube-header {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            cursor: pointer;
+        }
+        .cube-progress-circle {
+            width: 60px; height: 60px;
+            position: relative;
+            flex-shrink: 0;
+            margin-left: 15px;
+        }
+        .cube-progress-circle .days-left {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+        .cube-progress-circle .days-left span { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; }
+        .cube-progress-circle svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .cube-progress-circle .bg-circle { stroke: var(--border); }
+        .cube-progress-circle .progress-circle { stroke: var(--success); transition: stroke-dashoffset 0.5s; }
+        .cube-progress-circle .progress-circle.warning { stroke: var(--warning); }
+        .cube-progress-circle .progress-circle.danger { stroke: var(--danger); }
+        
+        .cube-info { flex-grow: 1; }
+        .cube-info h3 { font-size: 1.1rem; }
+        .cube-info p { color: var(--text-light); }
+
+        .cube-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease-out, padding 0.4s ease-out;
+        }
+        .container-cube.expanded .cube-details {
+            max-height: 500px;
+            padding: 0 15px 15px 15px;
+        }
+        .map-container { border-radius: 10px; height: 150px; width: 100%; background: #eee; margin-bottom: 15px; }
+        .cube-actions { display: flex; gap: 10px; }
+        .cube-actions .btn { flex: 1; }
+
+        /* --- Modals --- */
+        .modal-overlay {
+            position: fixed; inset: 0; background-color: rgba(0,0,0,0.6);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 2000; opacity: 0; visibility: hidden; transition: opacity 0.3s;
+        }
+        .modal-overlay.show { opacity: 1; visibility: visible; }
+        .modal-content {
+            background-color: white; padding: 25px; border-radius: var(--radius);
+            width: 90%; max-width: 400px; animation: slideUp 0.3s;
+            text-align: center;
+        }
+        .modal-content h3 { margin-bottom: 10px; }
+        .modal-content p { margin-bottom: 20px; color: var(--text-light); }
+        .modal-actions { display: flex; gap: 10px; }
+        .modal-actions .btn { flex: 1; }
+
+        /* Toast Notifications */
+        #toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 4000; display: flex; flex-direction: column; gap: 10px; align-items: center;}
+        .toast { background-color: #2d3748; color: white; padding: 10px 20px; border-radius: 25px; font-weight: 600; box-shadow: var(--shadow); opacity: 0; transform: translateY(-20px); transition: all 0.3s ease-in-out; display: flex; align-items: center; gap: 10px;}
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast .icon { font-size: 20px; }
+    </style>
+</head>
+<body>
+
+    <!-- Splash Screen -->
+    <div id="splash-screen">
+        <img id="splash-logo" src="https://i.postimg.cc/2SbDgD1B/1.png" alt="H.Saban Logo">
+    </div>
+
+    <!-- Main App Wrapper -->
+    <div id="app-wrapper">
+        <header class="app-header">
+            <div class="profile-info">
+                <div class="profile-avatar">
+                    <img id="profile-avatar-img" src="https://placehold.co/80x80/0b72b9/FFFFFF?text=A" alt="Profile">
+                    <div class="online-indicator"></div>
+                </div>
+                <div>
+                    <div id="contact-name" style="font-weight: 700;"></div>
+                </div>
+            </div>
+            <div class="clock-container">
+                <div id="clock"></div>
+                <div id="date" class="date"></div>
+            </div>
+            <div style="width: 50px;"></div> <!-- Spacer -->
+        </header>
+
+        <main class="app-container" id="app-container">
+            <!-- Home Page -->
+            <div id="page-home">
+                <h1 class="page-title" id="greeting"></h1>
+
+                <!-- Dynamic Status Board -->
+                <div id="status-board">
+                    <div id="status-text" class="status-text"></div>
+                    <div class="progress-bar">
+                        <div id="status-progress" class="progress-bar-inner"></div>
+                    </div>
+                </div>
+
+                <!-- Active Containers List -->
+                <div id="active-containers-list">
+                    <!-- Container cubes will be injected here by JS -->
+                </div>
+
+                <div id="no-active-containers" class="card" style="display: none; text-align: center;">
+                    <p style="font-size: 18px; font-weight: 600;">אין לך כרגע מכולות פעילות.</p>
+                </div>
+            </div>
+            <!-- Other pages will go here -->
+        </main>
+
+        <nav class="bottom-nav">
+            <!-- Navigation buttons will be implemented based on roadmap -->
+        </nav>
+    </div>
+
+    <!-- Modal Container -->
+    <div id="modal-container" class="modal-overlay"></div>
+    <div id="toast-container"></div>
+
+    <script>
+    // Self-invoking async function to encapsulate the app logic and handle errors gracefully
+    (async () => {
+        try {
+            document.addEventListener('DOMContentLoaded', () => {
+
+                // ========== 1. CONFIG & STATE ==========
+                const API_URL = "https://script.google.com/macros/s/AKfycbwy-Zs7okamhIN8exFYNr8JEan6aJVg1Te2vSNbTsaa-itJBDozqyRI6gvZg7kknmfx/exec"; // Use the stable API
+                let clientState = { id: null, name: null, avatar: null, contactPerson: null, orders: [], lastRequestStatus: null };
+                let mapInstances = {};
+
+                const dom = {
+                    body: document.body,
+                    appWrapper: document.getElementById('app-wrapper'),
+                    profileAvatarImg: document.getElementById('profile-avatar-img'),
+                    contactName: document.getElementById('contact-name'),
+                    clock: document.getElementById('clock'),
+                    date: document.getElementById('date'),
+                    greeting: document.getElementById('greeting'),
+                    statusBoard: document.getElementById('status-board'),
+                    statusText: document.getElementById('status-text'),
+                    statusProgress: document.getElementById('status-progress'),
+                    activeContainersList: document.getElementById('active-containers-list'),
+                    noActiveContainers: document.getElementById('no-active-containers'),
+                    modalContainer: document.getElementById('modal-container'),
+                    toastContainer: document.getElementById('toast-container')
+                };
+
+                // ========== 2. CORE APP LOGIC ==========
+                function initApp() {
+                    setupEventListeners();
+                    updateClock();
+                    setInterval(updateClock, 1000);
+                    
+                    const storedClientId = localStorage.getItem('saban_client_id');
+                    if (storedClientId) {
+                        loadClientData(storedClientId);
+                    } else {
+                        // In a real scenario, this would trigger a login flow.
+                        // For this demo, we'll simulate a login.
+                        setTimeout(() => {
+                           const clientId = prompt("שלום! אנא הזן מספר לקוח כדי להתחבר (לדוגמה: 601963):");
+                           if (clientId) {
+                               loadClientData(clientId.trim());
+                           } else {
+                               document.body.innerHTML = `<div style="padding: 20px; text-align: center;"><h1>נדרש מספר לקוח.</h1></div>`;
+                           }
+                        }, 3000); // Wait for splash screen to finish
+                    }
+
+                    // Auto-refresh data periodically
+                    setInterval(() => {
+                        if (clientState.id) loadClientData(clientState.id, true);
+                    }, 60000); // Refresh every 60 seconds
+                }
+
+                async function loadClientData(clientId, isRefresh = false) {
+                    try {
+                        // The API call would also fetch the `lastRequestStatus`
+                        const data = await apiPost({ action: 'getClientData', identifier: clientId });
+                        if (data.status === 'error' || !data.clientName) {
+                            throw new Error(data.message || "Client not found");
+                        }
+                        
+                        clientState = {
+                            id: data.clientId,
+                            name: data.clientName,
+                            avatar: data.avatarUrl,
+                            contactPerson: data.contactPerson || data.clientName.split('/')[0], // Simulate contact person
+                            orders: data.orders || [],
+                            // This part needs to be added to the backend script.
+                            // It should find the last request from this client in the 'בקשות' sheet.
+                            lastRequestStatus: data.lastRequestStatus || { text: "התקבלה! ממתינה לאישור מחלקת הזמנות...", progress: 25 }
+                        };
+                        
+                        localStorage.setItem('saban_client_id', data.clientId);
+                        
+                        if (!isRefresh) {
+                            renderFullUI();
+                        } else {
+                            renderHomepage();
+                        }
+
+                    } catch (error) {
+                        console.error("Failed to load client data:", error);
+                        localStorage.removeItem('saban_client_id');
+                        showToast("שגיאה בטעינת נתונים 😵", 'error');
+                    }
+                }
+
+                async function apiPost(body) {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify(body)
+                    });
+                    if (!response.ok) throw new Error(`Network error (status ${response.status})`);
+                    return await response.json();
+                }
+
+                async function sendClientRequest(requestType, details) {
+                    try {
+                        await apiPost({ action: 'clientRequest', clientId: clientState.id, clientName: clientState.name, requestType, details });
+                        showToast("הבקשה נשלחה בהצלחה! ✅", 'success');
+                        // Simulate updating the status board after a request
+                        clientState.lastRequestStatus = { text: "התקבלה! ממתינה לאישור...", progress: 25 };
+                        renderStatusBoard();
+                    } catch (error) {
+                        showToast(`שגיאה בשליחת הבקשה ❌`, 'error');
+                    }
+                }
+
+
+                // ========== 3. UI RENDERING ==========
+                function renderFullUI() {
+                    renderHeader();
+                    renderHomepage();
+                }
+                
+                function updateClock() {
+                    const now = new Date();
+                    dom.clock.textContent = now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+                    dom.date.textContent = now.toLocaleDateString('he-IL', { weekday: 'long', day: '2-digit', month: '2-digit' });
+                }
+
+                function renderHeader() {
+                    if (!clientState.id) return;
+                    dom.profileAvatarImg.src = clientState.avatar || `https://placehold.co/80x80/0b72b9/FFFFFF?text=${clientState.contactPerson.charAt(0)}`;
+                    dom.contactName.textContent = clientState.contactPerson;
+
+                    const hour = new Date().getHours();
+                    let greetingText = "";
+                    if (hour < 12) greetingText = `בוקר טוב, ${clientState.contactPerson} ☀️`;
+                    else if (hour < 18) greetingText = `צהריים טובים, ${clientState.contactPerson} ☕`;
+                    else greetingText = `ערב טוב, ${clientState.contactPerson} 🌙`;
+                    dom.greeting.textContent = greetingText;
+                }
+                
+                function renderHomepage() {
+                    renderHeader(); // Re-render header for greeting updates
+                    renderStatusBoard();
+                    renderActiveContainers();
+                }
+
+                function renderStatusBoard() {
+                    if (clientState.lastRequestStatus && clientState.lastRequestStatus.text) {
+                        dom.statusBoard.style.display = 'block';
+                        dom.statusText.textContent = clientState.lastRequestStatus.text;
+                        dom.statusProgress.style.width = `${clientState.lastRequestStatus.progress}%`;
+                    } else {
+                        dom.statusBoard.style.display = 'none';
+                    }
+                }
+
+                function renderActiveContainers() {
+                    const activeOrders = clientState.orders.filter(o => o['סטטוס'] !== 'סגור' && o['מכולה ירדה']);
+                    if (activeOrders.length > 0) {
+                        dom.activeContainersList.innerHTML = activeOrders.map(createContainerCubeHTML).join('');
+                        dom.noActiveContainers.style.display = 'none';
+                    } else {
+                        dom.activeContainersList.innerHTML = '';
+                        dom.noActiveContainers.style.display = 'block';
+                    }
+                }
+
+                function createContainerCubeHTML(order) {
+                    const startDate = order['תאריך הזמנה'] ? new Date(order['תאריך הזמנה']) : null;
+                    const endDate = order['תאריך סיום צפוי'] ? new Date(order['תאריך סיום צפוי']) : null;
+
+                    if (!startDate || !endDate) return ''; // Skip orders with invalid dates
+
+                    const totalMs = endDate - startDate;
+                    const elapsedMs = new Date() - startDate;
+                    const remainingMs = Math.max(0, endDate - new Date());
+                    const remainingDays = Math.ceil(remainingMs / (1000 * 60 * 60 * 24));
+                    const progressPercent = totalMs > 0 ? Math.min(100, (elapsedMs / totalMs) * 100) : 0;
+                    
+                    const isOverdue = new Date() > endDate;
+                    const isWarning = !isOverdue && remainingDays <= 2; // Warning within last 2 days
+
+                    let progressClass = 'success';
+                    if (isOverdue) progressClass = 'danger';
+                    else if (isWarning) progressClass = 'warning';
+
+                    const circleRadius = 26;
+                    const circumference = 2 * Math.PI * circleRadius;
+                    const strokeDashoffset = circumference - (progressPercent / 100) * circumference;
+
+                    return `
+                    <div class="container-cube ${isOverdue ? 'overdue' : ''}" data-order-id="${order['תעודה']}">
+                        <div class="cube-header" data-action="toggle-cube-details">
+                            <div class="cube-progress-circle">
+                                <div class="days-left">
+                                    ${isOverdue ? '!' : remainingDays}
+                                    <span>ימים</span>
+                                </div>
+                                <svg>
+                                    <circle class="bg-circle" cx="30" cy="30" r="${circleRadius}" stroke-width="4" fill="transparent"/>
+                                    <circle class="progress-circle ${progressClass}" cx="30" cy="30" r="${circleRadius}" stroke-width="4" fill="transparent"
+                                        stroke-dasharray="${circumference}"
+                                        stroke-dashoffset="${strokeDashoffset}"
+                                    />
+                                </svg>
+                            </div>
+                            <div class="cube-info">
+                                <h3>מכולה ${order['מכולה ירדה']}</h3>
+                                <p>${order['כתובת']}</p>
+                            </div>
+                            <div class="cube-arrow">▼</div>
+                        </div>
+                        <div class="cube-details">
+                            <div class="map-container" id="map-${order['תעודה']}"></div>
+                            <p><strong>תאריך התחלה:</strong> ${startDate.toLocaleDateString('he-IL')}</p>
+                            <p><strong>סיום צפוי:</strong> ${endDate.toLocaleDateString('he-IL')}</p>
+                            ${isOverdue ? `<p style="color:var(--danger); font-weight:bold; margin-top:5px;">תקופת השכירות הסתיימה!</p>` : ''}
+                            <div class="cube-actions">
+                                <button class="btn secondary" data-action="request-swap" data-order-id="${order['תעודה']}">בקש החלפה</button>
+                                <button class="btn" data-action="request-pickup" data-order-id="${order['תעודה']}">תאם פינוי</button>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+
+                // ========== 4. EVENT LISTENERS ==========
+                function setupEventListeners() {
+                    dom.body.addEventListener('click', e => {
+                        const actionElement = e.target.closest('[data-action]');
+                        if (!actionElement) return;
+
+                        const action = actionElement.dataset.action;
+                        const orderId = actionElement.dataset.orderId;
+                        const order = clientState.orders.find(o => o['תעודה'] == orderId);
+
+                        switch(action) {
+                            case 'toggle-cube-details':
+                                const cube = actionElement.closest('.container-cube');
+                                cube.classList.toggle('expanded');
+                                if (cube.classList.contains('expanded')) {
+                                    const mapContainer = cube.querySelector('.map-container');
+                                    const orderForMap = clientState.orders.find(o => o['תעודה'] == cube.dataset.orderId);
+                                    if(orderForMap) {
+                                       setTimeout(() => renderLeafletMap(mapContainer, orderForMap['כתובת']), 50);
+                                    }
+                                }
+                                break;
+                            case 'request-swap':
+                            case 'request-pickup':
+                                if (order) {
+                                    const actionText = action === 'request-swap' ? 'החלפה' : 'פינוי';
+                                    openConfirmationModal(
+                                        `אישור בקשת ${actionText}`,
+                                        `האם אתה בטוח שברצונך לבקש ${actionText} למכולה בכתובת ${order['כתובת']}`,
+                                        () => {
+                                            const details = `מכולה קיימת: ${order['תעודה']}. כתובת: ${order['כתובת']}.`;
+                                            sendClientRequest(actionText, details);
+                                        }
+                                    );
+                                }
+                                break;
+                        }
+                    });
+                }
+                
+                // ========== 5. HELPERS & UTILITIES ==========
+                function renderLeafletMap(container, address) {
+                    if (!container) return;
+                    if (mapInstances[container.id]) mapInstances[container.id].remove();
+                    
+                    container.innerHTML = 'טוען מפה...';
+                    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data && data.length > 0) {
+                                const { lat, lon } = data[0];
+                                container.innerHTML = ''; // Clear loading text
+                                const map = L.map(container, { scrollWheelZoom: false }).setView([lat, lon], 15);
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+                                L.marker([lat, lon]).addTo(map);
+                                mapInstances[container.id] = map;
+                            } else {
+                                container.innerHTML = 'לא ניתן היה למצוא את הכתובת.';
+                            }
+                        })
+                        .catch(error => {
+                            console.error("Map loading error:", error);
+                            container.innerHTML = 'שגיאה בטעינת המפה.';
+                        });
+                }
+                
+                function openConfirmationModal(title, message, onConfirm) {
+                    const modalHTML = `
+                        <div class="modal-content">
+                            <h3>${title}</h3>
+                            <p>${message}</p>
+                            <div class="modal-actions">
+                                <button class="btn secondary" data-modal-action="close">ביטול</button>
+                                <button class="btn" data-modal-action="confirm">אשר</button>
+                            </div>
+                        </div>
+                    `;
+                    dom.modalContainer.innerHTML = modalHTML;
+                    dom.modalContainer.classList.add('show');
+
+                    dom.modalContainer.querySelector('[data-modal-action="close"]').onclick = () => dom.modalContainer.classList.remove('show');
+                    dom.modalContainer.querySelector('[data-modal-action="confirm"]').onclick = () => {
+                        onConfirm();
+                        dom.modalContainer.classList.remove('show');
+                    };
+                }
+
+                function showToast(message, type = 'info') {
+                    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+                    const toast = document.createElement('div');
+                    toast.className = `toast ${type}`;
+                    toast.innerHTML = `<span class="icon">${icons[type] || ''}</span> ${message}`;
+                    dom.toastContainer.appendChild(toast);
+                    setTimeout(() => toast.classList.add('show'), 10);
+                    setTimeout(() => {
+                        toast.classList.remove('show');
+                        toast.addEventListener('transitionend', () => toast.remove());
+                    }, 3000);
+                }
+
+                // ========== 6. START APP ==========
+                initApp();
+            });
+        } catch (e) {
+            // Fallback for critical errors
+            document.body.innerHTML = `<div style="padding: 20px; text-align: center;"><h1>האפליקציה נתקלה בשגיאה חמורה</h1><p>נסה לרענן את הדף.</p></div>`
+            console.error("Critical application error:", e);
+        }
+    })();
+    </script>
+</body>
+</html>
