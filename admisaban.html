@@ -3,150 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ניהול הזמנות - ח.סבן</title>
+    <title>ניהול בקשות - ח.סבן</title>
     <link rel="icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+    
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+    
     <style>
-      /* Your existing CSS here */
-      /* NEW STYLE for notification button */
-      .task-actions button.notify-btn {
-          background-color: var(--accent);
-      }
+        :root {
+            --brand: #0b72b9; --accent: #ff9f1c; --bg: #f0f2f5; --card: #ffffff;
+            --text-dark: #1a202c; --text-light: #4a5568; --text-muted: #718096;
+            --border: #e2e8f0; --success: #38a169; --danger: #e53e3e;
+            --radius: 12px; --shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+        }
+        body {
+            font-family: 'Assistant', sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            padding: 20px;
+        }
+        #app-container { max-width: 1200px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header h1 { margin: 0; }
+        .loader { text-align: center; padding-top: 50px; font-size: 1.2rem; }
+        .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 15px; padding: 20px; }
+        .request-header { display: flex; justify-content: space-between; align-items: flex-start; }
+        .request-header h3 { margin: 0 0 5px 0; }
+        .request-meta { color: var(--text-muted); font-size: 0.9rem; }
+        .request-details { margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }
+        .status-badge { padding: 5px 12px; border-radius: 20px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        .status-badge.new { background-color: #fed7d7; color: #c53030; }
+        .status-badge.done { background-color: #c6f6d5; color: #2f855a; }
+        .action-button { background: none; border: 1px solid var(--brand); color: var(--brand); padding: 8px 16px; border-radius: 8px; cursor: pointer; margin-right: 10px; }
     </style>
 </head>
 <body>
-    <!-- Your existing HTML content here -->
-    
-    <!-- Firebase Libraries -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-    
+    <div id="app-container">
+        <div class="header">
+            <h1>לוח בקשות בזמן אמת</h1>
+            <div id="connection-status">מתחבר...</div>
+        </div>
+        <div id="requests-list" class="loader">טוען בקשות...</div>
+    </div>
+
     <script>
-    document.addEventListener('DOMContentLoaded', () => {
-        
-        // Your Firebase configuration
-        const firebaseConfig = {
-          apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
-          authDomain: "hsaban94-cc777.firebaseapp.com",
-          databaseURL: "https://hsaban94-cc777.firebaseio.com",
-          projectId: "hsaban94-cc777",
-          storageBucket: "hsaban94-cc777.firebasestorage.app",
-          messagingSenderId: "299206369469",
-          appId: "1:299206369469:web:6e8674eb787e52fa9457d4",
-          measurementId: "G-105YLDL68F"
-        };
-    
-        // Initialize Firebase
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
-        console.log("Firebase for Admin Initialized Successfully!");
+        (function() {
+            const dom = {
+                requestsList: document.getElementById('requests-list'),
+                connectionStatus: document.getElementById('connection-status'),
+            };
 
-        // ... your existing dom and state variables
-        let state = { tasks: [], templates: [] };
+            const state = {
+                requests: [],
+            };
 
-        // ===== UPDATED REAL-TIME LISTENER =====
-        function listenToNewRequests() {
-            // Listen for requests added in the last 24 hours for relevance
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            db.collection("requests").where("Timestamp", ">", yesterday)
-              .onSnapshot(snapshot => {
-                let hasNew = false;
-                snapshot.docChanges().forEach(change => {
-                    if (change.type === "added") {
-                        console.log("Real-time request received:", change.doc.data());
-                        hasNew = true;
-                    }
+            // --- API Communication ---
+            function api(action, payload) {
+                return new Promise((resolve, reject) => {
+                    google.script.run
+                        .withSuccessHandler(resolve)
+                        .withFailureHandler(reject)
+                        .doPost({ action, ...payload });
                 });
-                // If a new request came in, refresh the list to show it at the top
-                if (hasNew) {
-                  showToast("בקשה חדשה התקבלה!");
-                  fetchTasks();
-                }
-              });
-        }
-        
-        // ===== NEW FUNCTION TO SEND NOTIFICATION =====
-        async function sendClientNotification(taskId) {
-            const task = state.tasks.find(t => t.Timestamp === taskId);
-            if (!task) return;
-
-            const clientId = task['מספר לקוח'];
-            const title = 'עדכון לגבי בקשתך';
-            const message = `התקבל עדכון בנוגע לבקשתך מסוג "${task['סוג הבקשה']}".`;
-
-            showToast(`שולח התראה ללקוח ${task['שם לקוח']}...`);
-            try {
-                const response = await apiPost({ 
-                    action: 'sendNotificationToClient', 
-                    clientId: clientId, 
-                    title: title, 
-                    message: message 
-                });
-                if (response.success) {
-                    showToast('התראה נשלחה בהצלחה!', 'success');
-                } else {
-                    throw new Error(response.error);
-                }
-            } catch (error) {
-                console.error("Failed to send notification:", error);
-                showToast('שגיאה בשליחת התראה.', 'error');
             }
-        }
-        
-        function renderTasks() {
-            // ... your existing render logic ...
-            // INSIDE your map function, where you build the HTML for each card,
-            // add the new button inside the .task-actions div:
-            
-            /*
-            Example of where to add the button in your existing renderTasks:
-            <div class="task-actions">
-                <button data-action="share-whatsapp" class="whatsapp-btn">
-                    <svg ...>...</svg>
-                </button>
-                <button data-action="send-notification" class="notify-btn">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
-                </button>
-            </div>
-            */
-        }
-        
-        function setupEventListeners() {
-            document.body.addEventListener('click', e => {
-                const actionElement = e.target.closest('[data-action]');
-                // ... existing listener logic
-                
-                const action = actionElement.dataset.action;
-                const taskCard = actionElement.closest('.task-card');
-                const taskId = taskCard ? taskCard.dataset.taskId : null;
 
-                switch (action) {
-                    case 'share-whatsapp':
-                        openWhatsAppModal(taskId);
-                        break;
-                    case 'toggle-done':
-                        toggleTaskStatus(taskId);
-                        break;
-                    // --- NEW CASE for sending notifications ---
-                    case 'send-notification':
-                        sendClientNotification(taskId);
-                        break;
+            // --- Firebase Setup ---
+            function initializeFirebase() {
+                const firebaseConfig = {
+                   apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
+                   authDomain: "hsaban94-cc777.firebaseapp.com",
+                   databaseURL: "https://hsaban94-cc777.firebaseio.com",
+                   projectId: "hsaban94-cc777",
+                   storageBucket: "hsaban94-cc777.firebasestorage.app",
+                   messagingSenderId: "299206369469",
+                   appId: "1:299206369469:web:6e8674eb787e52fa9457d4"
+                };
+                firebase.initializeApp(firebaseConfig);
+                const db = firebase.firestore();
+                listenToNewRequests(db);
+            }
+
+            function listenToNewRequests(db) {
+                dom.requestsList.classList.remove('loader');
+                dom.connectionStatus.textContent = 'מחובר';
+                dom.connectionStatus.style.color = 'var(--success)';
+
+                db.collection("requests").orderBy("Timestamp", "desc").onSnapshot(snapshot => {
+                    console.log("Real-time update received from Firestore.");
+                    const newRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    state.requests = newRequests;
+                    render();
+                }, error => {
+                    console.error("Firestore snapshot error:", error);
+                    dom.connectionStatus.textContent = 'שגיאת חיבור';
+                    dom.connectionStatus.style.color = 'var(--danger)';
+                });
+            }
+
+            // --- Rendering ---
+            function render() {
+                if (state.requests.length === 0) {
+                    dom.requestsList.innerHTML = '<div class="card"><p>אין בקשות חדשות כרגע.</p></div>';
+                    return;
                 }
-            });
-        }
-        
-        async function initAdminDashboard() {
-            await fetchTasks();
-            setupEventListeners();
-            listenToNewRequests(); // Activate real-time listener
-        }
+                dom.requestsList.innerHTML = state.requests.map(req => renderRequestCard(req)).join('');
+            }
 
-        // ... all your other functions (apiPost, showToast, etc.)
-        
-        initAdminDashboard();
-    });
+            function renderRequestCard(req) {
+                const isNew = req['סטטוס טיפול'] === 'חדש';
+                const statusClass = isNew ? 'new' : 'done';
+                const statusText = isNew ? 'חדש' : 'בוצע';
+                
+                return `
+                    <div class="card" data-id="${req.id}" data-client-id="${req['מספר לקוח']}">
+                        <div class="request-header">
+                            <div>
+                                <h3>${req['סוג הבקשה']}</h3>
+                                <div class="request-meta">
+                                    <strong>${req['שם לקוח']}</strong> (${req['מספר לקוח']}) - 
+                                    <span>${new Date(req.id).toLocaleString('he-IL')}</span>
+                                </div>
+                            </div>
+                            <div class="status-badge ${statusClass}" data-action="toggle-status">${statusText}</div>
+                        </div>
+                        <div class="request-details">
+                            <p>${req['פרטים']}</p>
+                            <button class="action-button" data-action="send-notification">שלח התראה</button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // --- Event Handlers ---
+            async function handleToggleStatus(e) {
+                const card = e.target.closest('.card');
+                const requestId = card.dataset.id;
+                const currentStatus = e.target.textContent;
+                const newStatus = currentStatus === 'חדש' ? 'בוצע' : 'חדש';
+                
+                e.target.textContent = 'מעדכן...';
+                try {
+                    await api('updateRequestStatus', { requestId, status: newStatus });
+                    // Firestore listener will handle the re-render automatically
+                } catch (error) {
+                    console.error("Failed to update status:", error);
+                    e.target.textContent = currentStatus; // Revert on error
+                }
+            }
+
+            function handleSendNotification(e) {
+                const card = e.target.closest('.card');
+                const clientId = card.dataset.clientId;
+                const clientName = card.querySelector('strong').textContent;
+                
+                const message = prompt(`הקלד הודעה קצרה לשליחה אל ${clientName}:`, "הטיפול בבקשתך הושלם.");
+                if (message) {
+                    api('sendNotificationToClient', { clientId, title: 'עדכון מ-ח.סבן', message })
+                        .then(res => alert('ההתראה נשלחה בהצלחה!'))
+                        .catch(err => alert('שגיאה בשליחת התראה: ' + err));
+                }
+            }
+            
+            // --- Initialization ---
+            function init() {
+                initializeFirebase();
+                
+                dom.requestsList.addEventListener('click', e => {
+                    const action = e.target.dataset.action;
+                    if (action === 'toggle-status') handleToggleStatus(e);
+                    if (action === 'send-notification') handleSendNotification(e);
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', init);
+        })();
     </script>
 </body>
 </html>
