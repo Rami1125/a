@@ -5,107 +5,88 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>אזור אישי - ח.סבן</title>
     <meta name="theme-color" content="#ffffff"/>
-    <link rel="manifest" href="manifest.json">
+    <!-- The manifest link that caused the error has been removed -->
     <link rel="apple-touch-icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
     <link rel="icon" href="https://i.postimg.cc/2SbDgD1B/1.png">
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+    <!-- Fonts and Libraries -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <style>
-      /* Your existing CSS here */
+        :root {
+            --brand: #0b72b9; --accent: #ff9f1c; --bg: #f0f2f5; --card: #ffffff;
+            --text-dark: #1a202c; --text-light: #4a5568; --text-muted: #718096;
+            --border: #e2e8f0; --success: #38a169; --warning: #dd6b20; --danger: #e53e3e;
+            --radius: 16px; --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.07), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        /* Additional styles... */
     </style>
 </head>
 <body>
-    <!-- Your existing HTML content here -->
-
-    <!-- Firebase Libraries -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js"></script>
+    <div id="app-container">
+        <!-- App content will be rendered here -->
+    </div>
 
     <script>
     (function() {
-        try {
-            // Your Firebase configuration
-            const firebaseConfig = {
-              apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
-              authDomain: "hsaban94-cc777.firebaseapp.com",
-              databaseURL: "https://hsaban94-cc777.firebaseio.com",
-              projectId: "hsaban94-cc777",
-              storageBucket: "hsaban94-cc777.firebasestorage.app",
-              messagingSenderId: "299206369469",
-              appId: "1:299206369469:web:6e8674eb787e52fa9457d4",
-              measurementId: "G-105YLDL68F"
-            };
+        const firebaseConfig = {
+            apiKey: "AIzaSyDy3k1AoEKeuCKjmFxefn9fapeqv2Le1_w",
+            authDomain: "hsaban94-cc777.firebaseapp.com",
+            databaseURL: "https://hsaban94-cc777.firebaseio.com",
+            projectId: "hsaban94-cc777",
+            storageBucket: "hsaban94-cc777.firebasestorage.app",
+            messagingSenderId: "299206369469",
+            appId: "1:299206369469:web:6e8674eb787e52fa9457d4",
+            measurementId: "G-105YLDL68F"
+        };
 
-            // Initialize Firebase
-            if (!firebase.apps.length) {
-                firebase.initializeApp(firebaseConfig);
-            }
-            
-            const messaging = firebase.messaging();
+        firebase.initializeApp(firebaseConfig);
+        const messaging = firebase.messaging();
 
-            // Your existing JS code starts here
-            document.addEventListener('DOMContentLoaded', () => {
-                // ... dom elements, state, etc.
-                const clientState = {
-                    clientId: null,
-                    clientName: '',
-                    orders: []
-                };
-
-                // ===== NEW PUSH NOTIFICATION LOGIC =====
-                async function setupFirebaseMessaging() {
-                    try {
-                        await Notification.requestPermission();
-                        console.log('Notification permission granted.');
-                        
-                        const token = await messaging.getToken({ vapidKey: 'BGTj3y-qf4gU5O9qI8X2A7o1J6R7z8E0C9vK4g3L1S4rI5U6tT0O8n1M7w2N5H3xP9jR4sY0c6f1gA' }); // Replace with your VAPID key from Firebase console
-                        
-                        if (token) {
-                            console.log('FCM Token:', token);
-                            // Send this token to your server to save it
-                            await google.script.run
-                                .withSuccessHandler(() => console.log('Token saved successfully on server.'))
-                                .withFailureHandler(err => console.error('Failed to save token:', err))
-                                .saveClientFCMToken(clientState.clientId, token);
-                        } else {
-                            console.log('No registration token available. Request permission to generate one.');
-                        }
-                    } catch (err) {
-                        console.error('An error occurred while retrieving token. ', err);
-                    }
-                }
-
-                async function initApp() {
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const clientId = urlParams.get('c');
-                    
-                    if (!clientId) {
-                        // Handle no client ID
-                        return;
-                    }
-                    clientState.clientId = clientId;
-                    
-                    // Fetch client data...
-                    await fetchClientData(clientId);
-
-                    // After we know who the client is, set up notifications
-                    setupFirebaseMessaging(); 
-                }
-                // ===== END NEW PUSH NOTIFICATION LOGIC =====
-                
-                // ... all your other functions (fetchClientData, renderOrders, etc.)
-                
-                async function fetchClientData(clientId) {
-                  // your existing fetch logic
-                }
-                
-                initApp();
+        function requestNotificationPermission(clientId) {
+            messaging.requestPermission().then(() => {
+                console.log('Notification permission granted.');
+                return messaging.getToken();
+            }).then(token => {
+                console.log('FCM Token:', token);
+                // Send this token to your server to save it
+                google.script.run
+                    .withSuccessHandler(() => console.log("Token saved successfully."))
+                    .withFailureHandler(err => console.error("Error saving token: ", err))
+                    .saveClientFCMToken(clientId, token);
+            }).catch((err) => {
+                console.log('Unable to get permission to notify.', err);
             });
-
-        } catch (e) {
-            console.error("Critical application error:", e);
         }
+        
+        function getClientIdFromUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('c');
+        }
+
+        // Initialize notification permission request after getting client ID
+        document.addEventListener('DOMContentLoaded', () => {
+            const clientId = getClientIdFromUrl();
+            if (clientId) {
+                // You might want to ask for permission at a more opportune time,
+                // e.g., after the user logs in or performs an action.
+                // For now, we ask immediately.
+                setTimeout(() => requestNotificationPermission(clientId), 2000); // Delay to let the app load
+            }
+        });
+
+        // The rest of your client-side application logic goes here...
+        // For example, fetching client data, rendering the UI, etc.
+
     })();
     </script>
 </body>
